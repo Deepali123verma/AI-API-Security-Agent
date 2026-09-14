@@ -43,6 +43,7 @@ migration_test*.db
 node_modules/
 frontend/dist/
 frontend/coverage/
+public/
 *.local
 .npm
 .vite/

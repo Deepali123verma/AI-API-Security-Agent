@@ -225,9 +225,8 @@ Routes include `/login`, `/register`, `/dashboard`, `/scans`, `/scans/:scanId`, 
 
 **Ops**
 
-- Docker Compose (PostgreSQL + backend; optional fullstack profile)
-- Root production `Dockerfile` (SPA + API, one URL)
-- Railway-oriented `railway.toml`
+- Vercel (`vercel.json` + FastAPI function + `public/` SPA)
+- Docker Compose / root `Dockerfile` (optional container path)
 - GitHub Actions CI
 
 ---
@@ -237,9 +236,14 @@ Routes include `/login`, `/register`, `/dashboard`, `/scans`, `/scans/:scanId`, 
 ```text
 ai-api-security-agent/
 ├── .github/workflows/ci.yml
-├── Dockerfile                 # Production: React + FastAPI (one URL)
-├── railway.toml               # Railway build/deploy hints
+├── vercel.json                # Vercel: FastAPI + SPA same domain
+├── main.py                    # Vercel FastAPI entrypoint
+├── requirements.txt           # Vercel Python deps
+├── pyproject.toml             # Vercel entrypoint hint
+├── Dockerfile                 # Optional container image
+├── railway.toml               # Optional container host hints
 ├── docker-compose.yml
+├── scripts/migrate_db.py      # One-time managed Postgres migrations
 ├── backend/
 │   ├── app/
 │   │   ├── agents/          # Gemini reasoning (optional)
@@ -252,7 +256,7 @@ ai-api-security-agent/
 │   │   ├── schemas/         # Pydantic schemas
 │   │   └── services/        # Application services
 │   ├── alembic/             # Migrations
-│   ├── scripts/start.sh     # Migrate + uvicorn entrypoint
+│   ├── scripts/start.sh     # Container migrate + uvicorn entrypoint
 │   ├── tests/
 │   ├── Dockerfile           # API-only image (local/dev)
 │   └── requirements.txt
@@ -346,79 +350,105 @@ Dashboard: http://localhost:5173
 
 ---
 
-## Production deployment (Railway)
+## Production deployment (Vercel)
 
-### Recommended platform: Railway
+### Recommended platform: Vercel
 
-This project is prepared for **Railway** as one full-stack workspace:
+This repository is configured for **one Vercel project** with:
 
-| Need | How Railway fits |
-|------|------------------|
-| One project | Web service + PostgreSQL plugin in a single Railway project |
-| One public URL | Root `Dockerfile` builds the React SPA and serves it from FastAPI |
-| FastAPI | Container runs `uvicorn` with migrations on boot |
-| React/Vite | Built in the Docker multi-stage image (`VITE_API_BASE_URL` empty = same origin) |
-| PostgreSQL | Managed plugin; `DATABASE_URL` linked automatically |
-| Env vars / GitHub | Native support |
-| Cost | Hobby / trial options (check current Railway pricing) |
+- React/Vite SPA on the CDN (`public/` build output)
+- FastAPI as a Vercel Function (`main.py` → `backend/app/main.py`)
+- **Same public domain** for UI + API (`/auth`, `/api/v1`, `/health`, `/docs`)
+- Managed **PostgreSQL** from an external provider (Neon recommended; Vercel Postgres is also fine)
 
-**Why not the common alternatives for this repo**
+| Need | How this Vercel setup fits |
+|------|----------------------------|
+| One public URL | SPA + API rewrites on the same `*.vercel.app` domain |
+| FastAPI | Official Python/FastAPI runtime via root `main.py` |
+| React/Vite | Built during `buildCommand` into `public/` |
+| PostgreSQL | Neon / Vercel Postgres / any Postgres URL via `DATABASE_URL` |
+| Gemini | Server-side only (`GEMINI_API_KEY` in Vercel env) |
+| GitHub | Import repo and deploy on push |
 
-- **Render:** excluded by requirement.
-- **Vercel + separate API host:** splits frontend and backend across platforms (avoided).
-- **Fly.io:** excellent containers, but usually more DIY networking/volumes for the same “one project + Postgres + one URL” experience.
-- **DigitalOcean App Platform:** viable, typically higher cost for a student/portfolio stack.
+**Why not split hosts:** Frontend calls use an empty production `VITE_API_BASE_URL`, so the browser talks to the same origin (`/api/v1/...`, `/auth/...`).
+
+**Postgres note:** Vercel does not run Postgres inside the Node/Python function. Use a managed database (this guide assumes **Neon**).
+
+Optional: the root `Dockerfile` / Railway-oriented files remain for container deploys, but **Vercel is the primary path** for this request.
 
 ### Deployment architecture
 
 ```text
-Browser  →  https://<your-app>.up.railway.app
+Browser  →  https://<project>.vercel.app
                  │
-                 ▼
-         Railway Web Service (one container)
-         ┌──────────────────────────────┐
-         │  FastAPI                     │
-         │   /api /auth /health /docs   │
-         │   /  → React SPA (static)    │
-         │  Gemini calls (server-only)  │
-         └──────────────┬───────────────┘
-                        │ private
-                        ▼
-              Railway PostgreSQL
+     ┌───────────┴────────────┐
+     ▼                        ▼
+ CDN static SPA            FastAPI Function
+ (public/index.html,       (main.py → app.main:app)
+  /assets/*)                 /health /auth /api/v1
+                             /docs /openapi.json
+                             Gemini (server-only)
+                                   │
+                                   ▼
+                         Managed PostgreSQL (Neon)
 ```
 
-Gemini keys, JWT secrets, and DB credentials stay in Railway environment variables — never in the frontend bundle.
+### Deploy steps (manual actions — stop here for secrets/login)
 
-### Deploy steps (manual account actions required)
+1. **Create a Neon (or Vercel Postgres) database**  
+   - Neon: https://neon.tech → create project → copy the connection string  
+   - Prefer the pooled connection string for serverless if Neon offers one  
 
-1. Create a Railway account and connect GitHub: https://railway.app  
-2. **New Project** → **Deploy from GitHub repo** → `Deepali123verma/AI-API-Security-Agent`  
-3. Add a **PostgreSQL** plugin to the same project.  
-4. In the **web** service variables, set at least:
+2. **Run migrations once** against that database (from your machine, with env vars set locally — do not paste secrets into chat):
 
-| Variable | Notes |
-|----------|--------|
-| `DATABASE_URL` | Usually auto-injected when you link Postgres (Railway format is accepted; the app normalizes to `postgresql+psycopg://`) |
-| `JWT_SECRET_KEY` | Long random secret (generate locally; do not paste it into chat) |
-| `CORS_ORIGINS` | Your public app origin, e.g. `https://<your-app>.up.railway.app` |
-| `GEMINI_API_KEY` | Optional; set in Railway only if you want live AI analysis |
-| `GEMINI_MODEL` | Optional (default `gemini-2.5-flash`) |
-| `STATIC_DIR` | Already `/app/static` in the image |
-| `PORT` | Railway injects this; start script respects it |
+```bash
+cd backend
+# Set DATABASE_URL and JWT_SECRET_KEY in your shell or a local .env (gitignored)
+python ../scripts/migrate_db.py
+```
 
-5. Confirm the service uses the root **`Dockerfile`** / `railway.toml` (not `backend/Dockerfile` alone).  
-6. Generate a public domain under Railway **Settings → Networking**.  
-7. After the first successful deploy, open the public URL, register a user, and run a scan.
+3. **Import the GitHub repo on Vercel**  
+   - https://vercel.com → Add New Project → `Deepali123verma/AI-API-Security-Agent`  
+   - Framework should follow `vercel.json` (`fastapi`)  
+   - Root directory: repository root (not `frontend/` alone)
 
-The container entrypoint (`backend/scripts/start.sh`) bootstraps the `users` table, runs `alembic upgrade head`, then starts uvicorn.
+4. **Set Environment Variables** in the Vercel project (Production + Preview as needed):
 
-### Local production-like check
+| Variable | Where | Notes |
+|----------|--------|--------|
+| `DATABASE_URL` | Vercel (server) | Neon/Postgres URL (app normalizes to `postgresql+psycopg://`) |
+| `JWT_SECRET_KEY` | Vercel (server) | Long random secret |
+| `CORS_ORIGINS` | Vercel (server) | Your public origin, e.g. `https://<project>.vercel.app` (add custom domain later if used) |
+| `GEMINI_API_KEY` | Vercel (server) | Optional |
+| `GEMINI_MODEL` | Vercel (server) | Optional (`gemini-2.5-flash`) |
+| `JWT_ALGORITHM` | Optional | Default `HS256` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Optional | Default `30` |
+
+Do **not** set `GEMINI_API_KEY` / `JWT_SECRET_KEY` / `DATABASE_URL` as `VITE_*` variables.
+
+5. **Deploy** and open the Vercel URL. Register a user, upload a small OpenAPI file, run a scan.
+
+### Limits to be aware of
+
+- Serverless **maxDuration** is set to **60s** in `vercel.json` (Pro plan may be required for 60s; Hobby defaults can be lower — adjust in the Vercel dashboard if needed).
+- Request body size limits on Vercel may be lower than the app’s 5 MB upload setting; use smaller OpenAPI files on the free tier if uploads fail.
+- Cold starts can add latency on the first request after idle.
+
+### Key config files
+
+- `vercel.json` — install/build, function limits, SPA fallback rewrites  
+- `main.py` — Vercel FastAPI entrypoint importing `backend`  
+- `requirements.txt` — production Python deps for Vercel  
+- `pyproject.toml` — `[tool.vercel]` entrypoint hint  
+- `scripts/migrate_db.py` — one-time DB bootstrap + Alembic  
+
+### Optional container alternative
 
 ```bash
 docker compose --profile fullstack up --build web db
 ```
 
-Then open http://localhost:8080
+See older Railway/Docker notes in git history if you prefer a long-running container instead of serverless.
 
 ---
 
@@ -437,13 +467,13 @@ Root `.env` (from `.env.example`):
 | `GEMINI_TEMPERATURE` | Model temperature |
 | `GEMINI_MAX_BULK_FINDINGS` | Bulk analysis guardrail |
 | `CORS_ORIGINS` | Comma-separated allowed origins |
-| `STATIC_DIR` | Optional path to Vite `dist` for same-origin SPA serving |
+| `STATIC_DIR` | Optional (Docker image only). Leave unset on Vercel — SPA is in `public/` |
 
 Frontend `.env` (from `frontend/.env.example`):
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_API_BASE_URL` | Dev: `http://localhost:8000`. Production Docker/Railway build: leave empty for same-origin API calls |
+| `VITE_API_BASE_URL` | Dev: `http://localhost:8000`. Vercel/Docker production build: leave empty for same-origin API calls |
 
 **Never commit real `.env` files, API keys, JWT secrets, or database passwords.**
 
@@ -529,6 +559,7 @@ No dashboard screenshots are checked into this repository yet. After cloning and
 - Reports do not embed secrets or API keys
 - Regression matching does not use Gemini
 - Production image keeps `GEMINI_API_KEY` server-side only
+- On Vercel, keep secrets in project Environment Variables only (never `VITE_*`)
 
 ---
 
