@@ -1,2 +1,6 @@
 [tool.vercel]
 entrypoint = "main:app"
+
+# CORSMiddleware is top-level; force CDN promotion for the Vite SPA assets.
+[tool.vercel.fastapi.static]
+cdn = true

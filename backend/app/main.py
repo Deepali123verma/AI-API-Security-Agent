@@ -51,17 +51,36 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(scans.router)
 
-_static_dir = get_static_dir()
-if _static_dir is not None:
-    assets_dir = _static_dir / "assets"
+
+def _mount_spa(directory: Path) -> None:
+    """Attach the Vite SPA so API routes stay higher priority than the fallback."""
+    if hasattr(app, "frontend"):
+        # Absolute path avoids CWD differences (backend/ locally vs repo root on Vercel).
+        app.frontend("/", directory=str(directory), fallback="index.html")
+        return
+
+    assets_dir = directory / "assets"
     if assets_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
-        """Serve the React SPA for non-API routes (single public URL deployments)."""
         if full_path:
-            candidate = _static_dir / full_path
+            candidate = directory / full_path
             if candidate.is_file():
                 return FileResponse(candidate)
-        return FileResponse(_static_dir / "index.html")
+        return FileResponse(directory / "index.html")
+
+
+# Same-origin SPA:
+# - On Vercel the FastAPI function owns `/`, so copying to public/ alone shows
+#   {"detail":"Not Found"} at the root. Mount the Vite build via app.frontend().
+# - Docker/local: STATIC_DIR points at the built assets (unchanged).
+if os.getenv("VERCEL") == "1":
+    _vercel_spa = _PROJECT_ROOT / "frontend" / "dist"
+    if _vercel_spa.is_dir() and (_vercel_spa / "index.html").is_file():
+        _mount_spa(_vercel_spa)
+else:
+    _static_dir = get_static_dir()
+    if _static_dir is not None:
+        _mount_spa(_static_dir)
