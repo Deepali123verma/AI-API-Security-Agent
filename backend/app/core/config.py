@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Resolve .env relative to the repo (not process CWD), so `uvicorn` from
@@ -29,6 +30,22 @@ class Settings(BaseSettings):
     gemini_temperature: float = 0.2
     gemini_max_bulk_findings: int = 10
     cors_origins: str = "http://localhost:5173"
+    # Directory containing the Vite production build (index.html + assets).
+    # Empty/unset disables SPA serving (API-only mode for local backend-only runs).
+    static_dir: str | None = None
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: object) -> object:
+        """Accept Railway/Heroku-style postgres URLs and force the psycopg driver."""
+        if not isinstance(value, str):
+            return value
+        url = value.strip()
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url.removeprefix("postgres://")
+        if url.startswith("postgresql://") and not url.startswith("postgresql+"):
+            url = "postgresql+psycopg://" + url.removeprefix("postgresql://")
+        return url
 
 
 settings = Settings()
@@ -36,3 +53,12 @@ settings = Settings()
 
 def get_cors_origins() -> list[str]:
     return [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+
+
+def get_static_dir() -> Path | None:
+    if not settings.static_dir:
+        return None
+    path = Path(settings.static_dir)
+    if path.is_dir() and (path / "index.html").is_file():
+        return path
+    return None

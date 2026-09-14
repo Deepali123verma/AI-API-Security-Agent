@@ -1,0 +1,13 @@
+# Railway deployment — one web service serves API + React SPA.
+# Add a PostgreSQL plugin in the same Railway project and link DATABASE_URL.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "/app/scripts/start.sh"
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

@@ -225,7 +225,9 @@ Routes include `/login`, `/register`, `/dashboard`, `/scans`, `/scans/:scanId`, 
 
 **Ops**
 
-- Docker Compose (PostgreSQL + backend)
+- Docker Compose (PostgreSQL + backend; optional fullstack profile)
+- Root production `Dockerfile` (SPA + API, one URL)
+- Railway-oriented `railway.toml`
 - GitHub Actions CI
 
 ---
@@ -235,6 +237,9 @@ Routes include `/login`, `/register`, `/dashboard`, `/scans`, `/scans/:scanId`, 
 ```text
 ai-api-security-agent/
 ├── .github/workflows/ci.yml
+├── Dockerfile                 # Production: React + FastAPI (one URL)
+├── railway.toml               # Railway build/deploy hints
+├── docker-compose.yml
 ├── backend/
 │   ├── app/
 │   │   ├── agents/          # Gemini reasoning (optional)
@@ -247,8 +252,9 @@ ai-api-security-agent/
 │   │   ├── schemas/         # Pydantic schemas
 │   │   └── services/        # Application services
 │   ├── alembic/             # Migrations
+│   ├── scripts/start.sh     # Migrate + uvicorn entrypoint
 │   ├── tests/
-│   ├── Dockerfile
+│   ├── Dockerfile           # API-only image (local/dev)
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
@@ -259,7 +265,6 @@ ai-api-security-agent/
 │   │   └── layouts/
 │   ├── package.json
 │   └── .env.example
-├── docker-compose.yml
 ├── .env.example
 └── README.md
 ```
@@ -300,7 +305,7 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-Or with Docker from the project root:
+Or with Docker from the project root (API + Postgres):
 
 ```bash
 docker compose up --build
@@ -308,6 +313,14 @@ docker compose up --build
 
 - API: http://localhost:8000
 - Swagger: http://localhost:8000/docs
+
+Optional local **full-stack** image (FastAPI serves the built React SPA on one port):
+
+```bash
+docker compose --profile fullstack up --build web db
+```
+
+- App: http://localhost:8080
 
 For local uvicorn (not Docker), `DATABASE_URL` must use `localhost` and credentials that match your PostgreSQL install. Compose uses host `db` with user/password/db `postgres` / `postgres` / `security_agent`.
 
@@ -333,6 +346,82 @@ Dashboard: http://localhost:5173
 
 ---
 
+## Production deployment (Railway)
+
+### Recommended platform: Railway
+
+This project is prepared for **Railway** as one full-stack workspace:
+
+| Need | How Railway fits |
+|------|------------------|
+| One project | Web service + PostgreSQL plugin in a single Railway project |
+| One public URL | Root `Dockerfile` builds the React SPA and serves it from FastAPI |
+| FastAPI | Container runs `uvicorn` with migrations on boot |
+| React/Vite | Built in the Docker multi-stage image (`VITE_API_BASE_URL` empty = same origin) |
+| PostgreSQL | Managed plugin; `DATABASE_URL` linked automatically |
+| Env vars / GitHub | Native support |
+| Cost | Hobby / trial options (check current Railway pricing) |
+
+**Why not the common alternatives for this repo**
+
+- **Render:** excluded by requirement.
+- **Vercel + separate API host:** splits frontend and backend across platforms (avoided).
+- **Fly.io:** excellent containers, but usually more DIY networking/volumes for the same “one project + Postgres + one URL” experience.
+- **DigitalOcean App Platform:** viable, typically higher cost for a student/portfolio stack.
+
+### Deployment architecture
+
+```text
+Browser  →  https://<your-app>.up.railway.app
+                 │
+                 ▼
+         Railway Web Service (one container)
+         ┌──────────────────────────────┐
+         │  FastAPI                     │
+         │   /api /auth /health /docs   │
+         │   /  → React SPA (static)    │
+         │  Gemini calls (server-only)  │
+         └──────────────┬───────────────┘
+                        │ private
+                        ▼
+              Railway PostgreSQL
+```
+
+Gemini keys, JWT secrets, and DB credentials stay in Railway environment variables — never in the frontend bundle.
+
+### Deploy steps (manual account actions required)
+
+1. Create a Railway account and connect GitHub: https://railway.app  
+2. **New Project** → **Deploy from GitHub repo** → `Deepali123verma/AI-API-Security-Agent`  
+3. Add a **PostgreSQL** plugin to the same project.  
+4. In the **web** service variables, set at least:
+
+| Variable | Notes |
+|----------|--------|
+| `DATABASE_URL` | Usually auto-injected when you link Postgres (Railway format is accepted; the app normalizes to `postgresql+psycopg://`) |
+| `JWT_SECRET_KEY` | Long random secret (generate locally; do not paste it into chat) |
+| `CORS_ORIGINS` | Your public app origin, e.g. `https://<your-app>.up.railway.app` |
+| `GEMINI_API_KEY` | Optional; set in Railway only if you want live AI analysis |
+| `GEMINI_MODEL` | Optional (default `gemini-2.5-flash`) |
+| `STATIC_DIR` | Already `/app/static` in the image |
+| `PORT` | Railway injects this; start script respects it |
+
+5. Confirm the service uses the root **`Dockerfile`** / `railway.toml` (not `backend/Dockerfile` alone).  
+6. Generate a public domain under Railway **Settings → Networking**.  
+7. After the first successful deploy, open the public URL, register a user, and run a scan.
+
+The container entrypoint (`backend/scripts/start.sh`) bootstraps the `users` table, runs `alembic upgrade head`, then starts uvicorn.
+
+### Local production-like check
+
+```bash
+docker compose --profile fullstack up --build web db
+```
+
+Then open http://localhost:8080
+
+---
+
 ## Environment variables
 
 Root `.env` (from `.env.example`):
@@ -348,12 +437,13 @@ Root `.env` (from `.env.example`):
 | `GEMINI_TEMPERATURE` | Model temperature |
 | `GEMINI_MAX_BULK_FINDINGS` | Bulk analysis guardrail |
 | `CORS_ORIGINS` | Comma-separated allowed origins |
+| `STATIC_DIR` | Optional path to Vite `dist` for same-origin SPA serving |
 
 Frontend `.env` (from `frontend/.env.example`):
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_API_BASE_URL` | FastAPI base URL (default `http://localhost:8000`) |
+| `VITE_API_BASE_URL` | Dev: `http://localhost:8000`. Production Docker/Railway build: leave empty for same-origin API calls |
 
 **Never commit real `.env` files, API keys, JWT secrets, or database passwords.**
 
@@ -438,6 +528,7 @@ No dashboard screenshots are checked into this repository yet. After cloning and
 - CORS origins are configurable and are not `*` for this authenticated app
 - Reports do not embed secrets or API keys
 - Regression matching does not use Gemini
+- Production image keeps `GEMINI_API_KEY` server-side only
 
 ---
 

@@ -1,7 +1,24 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { clearToken, getToken } from './token'
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+/**
+ * Resolve the API base URL.
+ * - Local dev (no env): http://localhost:8000
+ * - Production same-origin deploy: leave VITE_API_BASE_URL empty so requests use the public app URL
+ * - Split hosting: set VITE_API_BASE_URL to the absolute API origin
+ */
+function resolveApiBaseUrl(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL
+  if (typeof configured === 'string' && configured.trim() !== '') {
+    return configured.trim().replace(/\/$/, '')
+  }
+  if (import.meta.env.PROD) {
+    return ''
+  }
+  return 'http://localhost:8000'
+}
+
+const baseURL = resolveApiBaseUrl()
 
 export const api = axios.create({
   baseURL,
