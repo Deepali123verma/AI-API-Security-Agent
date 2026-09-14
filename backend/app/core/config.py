@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -37,14 +38,34 @@ class Settings(BaseSettings):
     @field_validator("database_url", mode="before")
     @classmethod
     def normalize_database_url(cls, value: object) -> object:
-        """Accept Railway/Heroku-style postgres URLs and force the psycopg driver."""
+        """Normalize managed-Postgres URLs for SQLAlchemy + psycopg.
+
+        Also strips accidental wrapping/orphan quotes that break Neon query
+        params (Vercel logs: invalid channel_binding value: \"require'\").
+        """
         if not isinstance(value, str):
             return value
+
         url = value.strip()
+        if len(url) >= 2 and url[0] == url[-1] and url[0] in {"'", '"'}:
+            url = url[1:-1].strip()
+        url = url.rstrip("'\"").strip()
+
         if url.startswith("postgres://"):
             url = "postgresql://" + url.removeprefix("postgres://")
         if url.startswith("postgresql://") and not url.startswith("postgresql+"):
             url = "postgresql+psycopg://" + url.removeprefix("postgresql://")
+
+        parsed = urlparse(url)
+        if parsed.query:
+            cleaned: list[tuple[str, str]] = []
+            for key, raw_val in parse_qsl(parsed.query, keep_blank_values=True):
+                val = raw_val.strip().strip("'\"")
+                if key == "channel_binding" and val not in {"require", "prefer", "disable"}:
+                    val = "prefer"
+                cleaned.append((key, val))
+            url = urlunparse(parsed._replace(query=urlencode(cleaned)))
+
         return url
 
 

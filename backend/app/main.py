@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+import os
 
 from dotenv import load_dotenv
 
@@ -21,6 +22,12 @@ from app.models import Endpoint, Finding, Scan, User  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # On Vercel, schema is applied via scripts/migrate_db.py (one-time).
+    # Avoid failing the whole serverless cold start on DDL/connect issues.
+    if os.getenv("VERCEL") == "1":
+        yield
+        return
+
     Base.metadata.create_all(bind=engine)
     yield
 
