@@ -1,0 +1,36 @@
+openapi: 3.0.3
+info:
+  title: Sensitive Data API
+  version: 1.0.0
+
+paths:
+  /users:
+    get:
+      summary: List users
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  username:
+                    type: string
+
+  /register:
+    post:
+      summary: Register
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+      responses:
+        '201':
+          description: Created

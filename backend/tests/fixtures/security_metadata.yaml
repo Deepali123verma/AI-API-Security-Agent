@@ -1,0 +1,39 @@
+openapi: 3.0.3
+info:
+  title: Security Metadata API
+  version: 1.0.0
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []
+
+paths:
+  /public/status:
+    get:
+      summary: Public status
+      security: []
+      responses:
+        '200':
+          description: OK
+
+  /users:
+    get:
+      summary: List users
+      responses:
+        '200':
+          description: OK
+
+  /admin/users:
+    get:
+      summary: Admin users
+      security:
+        - bearerAuth: [admin]
+      responses:
+        '200':
+          description: OK

@@ -1,0 +1,9 @@
+"""Scan status constants used across the application."""
+
+PENDING = "PENDING"
+PARSING = "PARSING"
+COMPLETED = "COMPLETED"
+FAILED = "FAILED"
+
+ALLOWED_STATUSES = frozenset({PENDING, PARSING, COMPLETED, FAILED})
+SECURITY_SCAN_ELIGIBLE = frozenset({PENDING, COMPLETED, FAILED})

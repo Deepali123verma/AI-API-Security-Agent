@@ -1,0 +1,73 @@
+# Secrets and local environment (never commit)
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+**/secrets/
+**/credentials/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Local / test databases
+*.db
+*.sqlite
+*.sqlite3
+test.db
+migration_test*.db
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/coverage/
+*.local
+.npm
+.vite/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs and caches
+*.log
+logs/
+.cache/
+tmp/
+temp/
+*.tmp
+
+# Coverage / tooling
+coverage/
+.tox/
+.nox/
+
+# Docker local volumes / overrides (if present)
+docker-compose.override.yml

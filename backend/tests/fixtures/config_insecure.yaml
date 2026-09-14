@@ -1,0 +1,25 @@
+openapi: 3.0.3
+info:
+  title: Config API
+  version: 1.0.0
+
+servers:
+  - url: http://api.example.com
+
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: query
+      name: api_key
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+paths:
+  /status:
+    get:
+      summary: Status
+      responses:
+        '200':
+          description: OK
