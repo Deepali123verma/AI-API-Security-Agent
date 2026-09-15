@@ -248,4 +248,16 @@ describe('API error handling', () => {
     }
     expect(getErrorMessage(error)).toMatch(/session has expired/i)
   })
+
+  it('maps login 401 to incorrect username or password', () => {
+    const error = new AxiosError('unauthorized')
+    error.response = {
+      status: 401,
+      data: { detail: 'Incorrect username or password' },
+      statusText: 'Unauthorized',
+      headers: {},
+      config: { headers: {} as never },
+    }
+    expect(getErrorMessage(error)).toMatch(/incorrect username or password/i)
+  })
 })

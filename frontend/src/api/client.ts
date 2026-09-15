@@ -47,8 +47,14 @@ api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      clearToken()
-      onUnauthorized?.()
+      const requestUrl = error.config?.url ?? ''
+      // /auth/login uses 401 for bad credentials — that is not a stale session.
+      const isCredentialChallenge =
+        requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register')
+      if (!isCredentialChallenge) {
+        clearToken()
+        onUnauthorized?.()
+      }
     }
     return Promise.reject(error)
   },

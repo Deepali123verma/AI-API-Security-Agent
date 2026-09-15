@@ -89,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (username: string, password: string) => {
+      clearToken()
       try {
         const token = await loginUser(username, password)
         setToken(token.access_token)

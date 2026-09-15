@@ -40,6 +40,13 @@ export function getErrorMessage(error: unknown, fallback = 'Something went wrong
     const detail = detailToMessage(body?.detail, fallback)
 
     if (status === 401) {
+      // Login returns 401 with this detail; do not mislabel it as an expired session.
+      if (
+        typeof body?.detail === 'string' &&
+        /incorrect username or password/i.test(body.detail)
+      ) {
+        return body.detail
+      }
       return 'Your session has expired. Please sign in again.'
     }
     if (status === 403) {
