@@ -1,7 +1,7 @@
 """Add scans and endpoints tables
 
 Revision ID: 001
-Revises:
+Revises: 000
 Create Date: 2026-03-23
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "001"
-down_revision: Union[str, None] = None
+down_revision: Union[str, None] = "000"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

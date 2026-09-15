@@ -72,3 +72,6 @@ coverage/
 
 # Docker local volumes / overrides (if present)
 docker-compose.override.yml
+
+# Vercel CLI local link metadata
+.vercel
