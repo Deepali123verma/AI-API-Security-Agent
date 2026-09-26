@@ -1,4 +1,4 @@
-# AI API Security Agent
+# AI-Assisted API Security Platform
 
 [![CI](https://github.com/Deepali123verma/AI-API-Security-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Deepali123verma/AI-API-Security-Agent/actions/workflows/ci.yml)
 
